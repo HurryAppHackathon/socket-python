@@ -1,8 +1,8 @@
 from typing import (
-    Optional, Dict
+    Optional, Dict, List
 )
 from .objects import (
-    UserObject, PartyObject
+    UserObject
 )
 import exceptions
 import psycopg2
@@ -26,7 +26,7 @@ class RedisDatabaseManager:
         )
         self.node = node
 
-    def set_party_video_url(self, party_id: int, video_url: str):
+    def set_party_video_url(self, party_id: int, video_url: str) -> bool:
         """Set the party_video."""
         
         if self.redis_instance.exists(f"parties:{party_id}") == 0:
@@ -35,11 +35,11 @@ class RedisDatabaseManager:
                 message="Party not found"
             )
         
-        self.redis_instance.hset(
+        return self.redis_instance.hset(
             f"parties:{party_id}", "video_url", video_url
         )
 
-    def get_party(self, party_id: int):
+    def get_party(self, party_id: int) -> Dict[bytes, bytes]:
         """Get the video id."""
 
         if self.redis_instance.exists(f"parties:{party_id}") == 0:
@@ -50,7 +50,25 @@ class RedisDatabaseManager:
         
         return self.redis_instance.hgetall(f"parties:{party_id}")
     
-    def check_if_user_in_party(self, party_id: str, user_id: int):
+    def get_party_id(self, invite_code: str) -> str:
+        """Get the party id via token."""
+
+        party_id = self.redis_instance.get(
+            name=f"invite_codes:{invite_code}"
+        )
+        return int(party_id)
+    
+    def get_users_in_party(self, party_id: int) -> List:
+        """Get all the members in the party."""
+        if self.redis_instance.exists(f"parties:{party_id}") == 0:
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.PARTY_NOT_FOUND,
+                message="Party not found"
+            )
+        
+        return self.redis_instance.lrange(f"parties_users:{party_id}", 0, -1)
+
+    def check_if_user_in_party(self, party_id: str, user_id: int) -> bool:
         """Checks if the user in the party."""
         if self.redis_instance.exists(f"parties:{party_id}") == 0:
             raise exceptions.GeneralException(
@@ -118,17 +136,23 @@ class PostgressDatabaseManager:
     """A manager for the postgress database
     so we can get the things from it."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        user: str,
+        password: str
+    ) -> None:
         self.postgress_database = psycopg2.connect(
             database="streaming_service_backend",
-            host="172.20.10.6",
-            port=40001,
-            user="sail",
-            password="secret"
+            host=host,
+            port=port,
+            user=user,
+            password=password
         )
         self.postgress_cursor = self.postgress_database.cursor()
 
-    def get_user(self, user_id: int):
+    def get_user(self, user_id: int) -> "UserObject":
         """Fetch the user."""
         QUERY = f'SELECT * FROM "public".users where id = {user_id}'
         self.postgress_cursor.execute(QUERY)

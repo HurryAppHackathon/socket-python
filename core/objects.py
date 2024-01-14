@@ -18,8 +18,9 @@ class UserObject:
 @dataclass
 class PartyObject:
     id: int
+    user_id: int
     video_url: str
-    users: List[UserObject]
+    invite_url: str
 
 @dataclass
 class MessageObject:

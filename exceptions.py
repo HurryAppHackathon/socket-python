@@ -1,9 +1,9 @@
-from enum import Enum, auto
+from enum import IntEnum, auto
 from typing import (
     Optional
 )
 
-class ErrorCode(Enum):
+class ErrorCode(IntEnum):
     """For each error there is an
     error code so the frontend
     developer can clearfiy the
@@ -30,6 +30,14 @@ class ExceptionAbstract(Exception):
         self.message = message
 
         super().__init__(message)
+    
+    def json_error(self):
+        return {
+            "code": self.error_code,
+            "errors": [
+                self.message
+            ]
+        }
 
 class GeneralException(ExceptionAbstract):
     pass

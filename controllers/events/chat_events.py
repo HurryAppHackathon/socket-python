@@ -3,7 +3,7 @@ import dataclasses
 import datetime
 
 @dataclasses.dataclass
-class CreateMessage(BaseException):
+class CreateMessage(BaseObject):
     content: str
     party_id: int
     user_id: int

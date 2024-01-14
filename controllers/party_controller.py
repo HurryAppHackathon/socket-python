@@ -8,36 +8,7 @@ import exceptions
 
 class PartyController(ControllerAbstract):
     """The chat controller."""
-
-
-    def check_if_auth(self, auth_token, user_id):
-        print("1")
-        if auth_token is None:
-            raise exceptions.GeneralException(
-                error_code=exceptions.ErrorCode.NOT_AUTH,
-                message="YOU SHOULD LOGIN!"
-            )
-        
-        print("2")
-        auth_token_type, bearer_token = auth_token.split()
-        if auth_token_type != "Bearer":
-            raise exceptions.GeneralException(
-                error_code=exceptions.ErrorCode.INVAILD_DATA,
-                message="Not vaild data."
-            )
-        
-        print("3")
-        user_token_in_redis = self.redis_database.get_user_token(
-            user_id=user_id
-        )
-        print(user_token_in_redis)
-        if user_token_in_redis != bearer_token.encode():
-            raise exceptions.GeneralException(
-                error_code=exceptions.ErrorCode.NOT_AUTH,
-                message="YOU SHOULD LOGIN!"
-            )
-        print("4")
-        
+    
     async def broadcast_to_party(self, party_id: int, **kwargs) -> None:
         """Broadcast message to the users in the room."""
         if party_id not in self.main_controller.parties_room.keys():
@@ -47,7 +18,7 @@ class PartyController(ControllerAbstract):
             )
         
         for websocket in self.main_controller.parties_room[party_id]:
-            await websocket.send_json(kwargs)
+            await websocket.send_json(dict(kwargs))
 
     @ControllerAbstract.register_function(name="join_party")
     @ControllerAbstract.register_argument(name="party", type=JoinParty)
@@ -56,25 +27,39 @@ class PartyController(ControllerAbstract):
         # it going to emit this function
         # and it going to add the user
         # to the redis app
-
-        self.check_if_auth(
-            auth_token=ws.headers.get("Authorization"),
+        self.main_controller.check_if_auth(
+            websocket=ws,
             user_id=event.user_id
         )
+
+        party_id = self.redis_database.get_party_id(
+            invite_code=event.invite_code
+        )
+        if party_id is None:
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.PARTY_NOT_FOUND,
+                message="The invite code is invaild."
+            )
         
-        if event.party_id not in self.main_controller.parties_room.keys():
-            self.main_controller.parties_room[event.party_id] = []
-        self.main_controller.parties_room[event.party_id].append(ws)
+        if party_id not in self.main_controller.parties_room.keys():
+            self.main_controller.parties_room[party_id] = []
+        self.main_controller.parties_room[party_id].append(ws)
         self.main_controller.users_subed[ws] = event.user_id
         
         self.redis_database.add_user_to_party(
-            event.party_id, user_id=event.user_id
+            party_id, user_id=event.user_id
         )
+        members = self.redis_database.get_users_in_party(party_id)
 
         await self.broadcast_to_party(
-            party_id=event.party_id, event="user_joined",
+            party_id=party_id, event="user_joined",
             data={
-                "user_id": event.user_id
+                "user_id": event.user_id,
+                "user_avatar": None,
+                "party_id": party_id,
+                "users": [
+                    int(member.decode()) for member in members
+                ]
             }
         )
 
@@ -84,8 +69,8 @@ class PartyController(ControllerAbstract):
         # Just update the video url in the redis database
         # and then send a socket everywhere
 
-        self.check_if_auth(
-            auth_token=event.headers.get("Authorization"),
+        self.main_controller.check_if_auth(
+            websocket=ws,
             user_id=event.user_id
         )
 
@@ -113,8 +98,8 @@ class PartyController(ControllerAbstract):
     async def on_update_video(self, event: "SeekVideo", ws: WebSocket):
         # Sekk the video.
 
-        x = self.check_if_auth(
-            auth_token=ws.headers.get("Authorization"),
+        self.main_controller.check_if_auth(
+            websocket=ws,
             user_id=event.user_id
         )
 

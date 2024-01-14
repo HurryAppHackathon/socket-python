@@ -6,8 +6,8 @@ import dataclasses
 
 @dataclasses.dataclass
 class JoinParty(BaseObject):
-    party_id: int
     user_id: int
+    user_avatar: str
     invite_code: Optional[str] = None
 
 @dataclasses.dataclass

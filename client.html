@@ -1,0 +1,157 @@
+<body>
+  <div id="members"></div>
+  <div id="users"></div>
+  <video id="video" controls></video>
+  <form id="set_video_url">
+    <input type="text" name="video_url" placeholder="Video Url" />
+    <input type="submit" />
+  </form>
+  <form id="join_party">
+    <input type="text" name="invite_code" placeholder="Party Invite" />
+    <input type="submit" />
+  </form>
+  <form id="auth">
+    <input type="text" name="user_id" placeholder="User ID" />
+    <input type="text" name="token" placeholder="User Token ID" />
+    <input type="submit" />
+  </form>
+</body>
+<script>
+  const webSocket = new WebSocket("ws://localhost:8000");
+  const members = document.getElementById("members");
+  const video = document.getElementById("video");
+  const messages = document.getElementById("messages");
+  const authForm = document.getElementById("auth");
+  const joinParty = document.getElementById("join_party");
+  const setVideoUrl = document.getElementById("set_video_url");
+  let userId = null;
+  let partyId = null;
+  let userToken = null;
+  let user = {
+    avatar: "123",
+  };
+
+  webSocket.onopen = (event) => {
+    console.log("hello world!");
+  };
+
+  webSocket.onmessage = (event) => {
+    const packet = JSON.parse(event.data);
+
+    console.log(packet);
+    if (packet.event == "user_joined") {
+      partyId = packet.data.party_id;
+      members.innerHTML += "<p>" + packet.data.user_id + "</p>";
+    } else if (packet.event == "update_party_video_url") {
+      video.src = packet.data.video_url;
+      video.load();
+    } else if (packet.event == "seek_to") {
+      const state = packet.data.state;
+      if(userId == packet.data.user_id) return
+      if (state == "pause") {
+        console.log("lol")
+        video.pause();
+      } else if (state == "resume") {
+        video.play();
+      } else if (state == "seek") {
+        const seekTo = packet.data.seek_to;
+        if(seekTo - video.currentTime < 1){
+          return
+        }
+        video.currentTime = parseInt(packet.data.seek_to);
+      }
+    }
+  };
+
+  video.onseeking = (event) => {
+    const data = {
+      controller: "/party",
+      event: "update_video",
+      token: `Bearer ${userToken}`,
+      data: {
+        update: {
+          party_id: partyId, // int
+          user_id: userId, // str
+          state: "seek", // pause, resume and seek
+          seek_to: video.currentTime, // int
+        },
+      },
+    };
+    webSocket.send(JSON.stringify(data));
+  };
+  video.onpause = (event) => {
+    const data = {
+      controller: "/party",
+      event: "update_video",
+      token: `Bearer ${userToken}`,
+      data: {
+        update: {
+          party_id: partyId, // int
+          user_id: userId, // str
+          state: "pause", // pause, resume and seek
+          seek_to: null, // int
+        },
+      },
+    };
+    webSocket.send(JSON.stringify(data));
+  }
+  video.onplay = (event) => {
+    const data = {
+      controller: "/party",
+      event: "update_video",
+      token: `Bearer ${userToken}`,
+      data: {
+        update: {
+          party_id: partyId, // int
+          user_id: userId, // str
+          state: "resume", // pause, resume and seek
+          seek_to: null, // int
+        },
+      },
+    };
+    webSocket.send(JSON.stringify(data));
+  }
+
+  authForm.onsubmit = (event) => {
+    event.preventDefault();
+    const formData = new FormData(authForm);
+    userId = parseInt(formData.get("user_id"));
+    userToken = formData.get("token")
+  };
+
+  joinParty.onsubmit = (event) => {
+    event.preventDefault();
+    const formData = new FormData(joinParty);
+    const data = {
+      controller: "/party",
+      event: "join_party",
+      token: `Bearer ${userToken}`,
+      data: {
+        party: {
+          user_id: userId, // int
+          user_avatar: "123", // str
+          invite_code: formData.get("invite_code"),
+        },
+      },
+    };
+    webSocket.send(JSON.stringify(data));
+  };
+
+  setVideoUrl.onsubmit = (event) => {
+    event.preventDefault();
+    const formData = new FormData(setVideoUrl);
+    const data = {
+      controller: "/party",
+      event: "set_party_video_url",
+      token: `Bearer ${userToken}`,
+      data: {
+        update: {
+          party_id: partyId, // int
+          user_id: userId, // str
+          video_url: formData.get("video_url"),
+        },
+      },
+    };
+    webSocket.send(JSON.stringify(data));
+  };
+</script>

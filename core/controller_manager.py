@@ -107,11 +107,27 @@ class ControllerAbstract:
         for name in websocket_data.get("data").keys():
             if name in callback.controller_args.keys():
                 converted_object = callback.controller_args.get(name)
-                args.append(
-                    converted_object( 
-                        **websocket_data.get("data")[name],
+                try:
+                    args.append(
+                        converted_object( 
+                            **websocket_data.get("data")[name],
+                        )
                     )
-                )
+                except:
+                    raise exceptions.GeneralException(
+                        error_code=exceptions.ErrorCode.INVAILD_DATA,
+                        message="Not vaild data."
+                    )
+
+        token_value = websocket_data.get('token', None)
+        if token_value is None:
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.NOT_AUTH,
+                message="No token found."
+            )
+        
+        if getattr(websocket_instance, "token", None) is None:
+            setattr(websocket_instance, "token", token_value)
         
         if len(args) != 0:
             await callback(self, *args, websocket_instance)
@@ -135,6 +151,48 @@ class ControllerManager:
             controller.redis_database = redis_database
             controller.main_controller = self
             self.controllers[controller.name] = controller
+
+    def check_if_auth(self, websocket: tinyws.WebSocket, user_id: int) -> None:
+        """Check if the user is auth."""
+        if hasattr(websocket, "token") is False:
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.NOT_AUTH,
+                message="DO Auth Someone"
+            )
+
+        auth_token = websocket.token
+        if auth_token is None:
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.NOT_AUTH,
+                message="YOU SHOULD LOGIN!"
+            )
+        
+        auth_token_type, bearer_token = auth_token.split()
+        if auth_token_type != "Bearer":
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.INVAILD_DATA,
+                message="Not vaild data."
+            )
+        
+        user_token_in_redis = self.redis_database.get_user_token(
+            user_id=user_id
+        )
+        if user_token_in_redis != bearer_token.encode():
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.NOT_AUTH,
+                message="YOU SHOULD LOGIN!"
+            )
+
+    async def broadcast_to_party(self, party_id: int, **kwargs) -> None:
+        """Broadcast message to the users in the room."""
+        if party_id not in self.parties_room.keys():
+            raise exceptions.GeneralException(
+                error_code=exceptions.ErrorCode.PARTY_NOT_FOUND,
+                message="Party not found."
+            )
+        
+        for websocket in self.parties_room[party_id]:
+            await websocket.send_json(kwargs)
 
     async def on_request(self, websocket_instance: tinyws.WebSocket) -> None:
         """It going to find which controller it trys to speak
@@ -168,5 +226,5 @@ class ControllerManager:
         self.redis_database.remove_user_from_party(
             party_subed_to, user_id
         )
-        self.parties_room[str(party_subed_to)].remove(websocket_instance)
+        self.parties_room[party_subed_to].remove(websocket_instance)
         self.users_subed.pop(websocket_instance)

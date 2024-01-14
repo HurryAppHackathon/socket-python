@@ -1,48 +1,51 @@
 import tinyws
 import tinyws.server
 import uvicorn
-import secrets
 import uvloop
 
 from core import (
     ControllerManager, RedisDatabaseManager
 )
+from exceptions import GeneralException
 from controllers import (
-    PartyController, ChatController
+    PartyController, ChatController,
 )
+from dotenv import dotenv_values
 
+env = dotenv_values()
 redis_database = RedisDatabaseManager(
-    database_host="172.20.10.6",
-    database_port=6379
+    database_host=env["REDIS_HOST"],
+    database_port=env["REDIS_PORT"]
 )
 party_controller = PartyController("/party")
 chat_controller = ChatController("/chat")
 controller = ControllerManager(
     controllers=[
         party_controller,
-        chat_controller
+        chat_controller,
     ],
     redis_database=redis_database
 )
-    
-
-websocket_per_token = {}
 
 @tinyws.server.app()
 async def application(websocket: tinyws.WebSocket) -> None:
     """The main handler of the application."""
     await websocket.accept()
 
-    token_for_socket = secrets.token_hex(6)
-    websocket_per_token[token_for_socket] = websocket
-
     while True:
         try:
             # read the data.
             await controller.on_request(websocket)
         except Exception as e:
-            await controller.on_disconnect(websocket)
-            raise e
+            if issubclass(e.__class__, (GeneralException, )):
+                print(e)
+                await websocket.send_json(
+                    e.json_error()
+                )
+            else:
+                await controller.on_disconnect(websocket)
+                break
+
 
 uvloop.install()
 uvicorn.run(
