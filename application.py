@@ -4,7 +4,8 @@ import uvicorn
 import uvloop
 
 from core import (
-    ControllerManager, RedisDatabaseManager
+    ControllerManager, RedisDatabaseManager,
+    PostgressDatabaseManager
 )
 from exceptions import GeneralException
 from controllers import (
@@ -17,6 +18,14 @@ redis_database = RedisDatabaseManager(
     database_host=env["REDIS_HOST"],
     database_port=env["REDIS_PORT"]
 )
+postgress_database = PostgressDatabaseManager(
+    host=env["POSTGRESS_HOST"],
+    port=env["POSTGRESS_PORT"],
+    POSTGRESS_USERNAME=env["POSTGRESS_USERNAME"],
+    password=env["POSTGRESS_PASSWORD"]
+)
+redis_database.set_database(postgress_database)
+
 party_controller = PartyController("/party")
 chat_controller = ChatController("/chat")
 controller = ControllerManager(
