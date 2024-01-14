@@ -59,7 +59,7 @@ class PartyController(ControllerAbstract):
                 "party_id": party_id,
                 "users": [
                     int(member.decode()) for member in members
-                ]
+                ].remove(event.user_id)
             }
         )
 

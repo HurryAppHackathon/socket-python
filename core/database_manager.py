@@ -24,6 +24,7 @@ class RedisDatabaseManager:
             host=database_host,
             port=database_port
         )
+        self.postgress_database: "PostgressDatabaseManager" = None
         self.node = node
 
     def set_party_video_url(self, party_id: int, video_url: str) -> bool:
@@ -131,6 +132,9 @@ class RedisDatabaseManager:
             f"parties_users:{party_id}", 1, str(user_id).encode("utf-8")
         )
         
+    def set_database(self, database: "PostgressDatabaseManager") -> None:
+        """Set the database."""
+        self.postgress_database = database
 
 class PostgressDatabaseManager:
     """A manager for the postgress database
@@ -152,6 +156,20 @@ class PostgressDatabaseManager:
         )
         self.postgress_cursor = self.postgress_database.cursor()
 
+    def get_user(self, user_id: int) -> "UserObject":
+        """Fetch the user."""
+        QUERY = f'SELECT * FROM "public".users where id = {user_id}'
+        self.postgress_cursor.execute(QUERY)
+
+        user_data = self.postgress_cursor.fetchone()
+        user_object = UserObject(
+            id=user_data[0],
+            username=user_data[1],
+            email=user_data[4],
+            created_at=user_data[-2]
+        )
+        return user_object
+    
     def get_user(self, user_id: int) -> "UserObject":
         """Fetch the user."""
         QUERY = f'SELECT * FROM "public".users where id = {user_id}'
